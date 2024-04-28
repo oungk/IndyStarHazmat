@@ -1,0 +1,670 @@
+---
+title: "Final Code Hazmat Investigations"
+name: Katherine Oung
+date: "2023-07-22"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r import libraries}
+library(tidyverse)
+library(lubridate)
+library(plotly)
+library(dplyr)
+library(readxl)
+library(scales)
+library(janitor)
+options(scipen = 9999)
+
+```
+
+#################################################################
+Setting Up the Data
+- reading data in
+- fixing date information
+- removing rows so you only see incidents (accounting for "multiple rows per incident")
+- adjust incidents 
+#################################################################
+
+The first thing to do is to import your two datasets of hazmat incidents. The first is a detailed incident report of all hazmat incidents in the whole country. The second is a detailed incident report of hazmat incidents in the five-state region (IN, IL, OH, MI, KY)
+```{r}
+hazmat_allstates <- read.csv('AllStates_Incident Detailed Report All fields included in Form 5800 (2).csv')
+hazmat_region_full <- read.csv("Hazmat-FULLREPORT-Incident-Detailed-Report-All-fields-included-in-Form-5800.csv")
+```
+
+Fix dates
+- Region data is in Month-date-year format
+- Country data is in Year-month-date format
+```{r}
+#fix date column
+hazmat_allstates <- hazmat_allstates %>%
+  mutate(Date.Of.Incident = ymd(Date.Of.Incident)) %>%
+  mutate(year = year(Date.Of.Incident)) %>%
+  mutate(year = as.integer(year))
+
+#fix date column
+hazmat_region_full <- hazmat_region_full %>%
+  mutate(Date.Of.Incident = mdy(Date.Of.Incident)) %>%
+  mutate(year = year(Date.Of.Incident)) %>%
+  mutate(year = as.integer(year))
+```
+
+Make into incidents
+```{r}
+#all states incidents
+hazmat_allstates_incidents <- hazmat_allstates %>%
+  select(Report.Number, Multiple.Rows.Per.Incident, Carrier.Reporter.Name, Mode.Of.Transportation, Incident.County, Environmental.Damage.Result, Water.Sewer.Result.Ind, Incident.City, Incident.State, Date.Of.Incident, Serious.Incident.Ind, Transportation.Phase, Total.Amount.Of.Damages, Total.Hazmat.Injuries, Total.Hazmat.Fatalities, year)
+
+hazmat_allstates_incidents <- distinct(hazmat_allstates_incidents) %>%
+    mutate(countystate = paste(Incident.County, " COUNTY, ", Incident.State, sep = ""))
+
+#region incidents
+hazmat_region_full_incidents <- hazmat_region_full %>%
+  select(Report.Number, Multiple.Rows.Per.Incident, Carrier.Reporter.Name, Mode.Of.Transportation, Incident.County, Environmental.Damage.Result, Water.Sewer.Result.Ind, Incident.City, Incident.State, Date.Of.Incident, Serious.Incident.Ind, Transportation.Phase, Total.Amount.Of.Damages, Total.Hazmat.Injuries, Total.Hazmat.Fatalities, year)
+
+hazmat_region_full_incidents <- distinct(hazmat_region_full_incidents) %>%
+    mutate(countystate = paste(Incident.County, " COUNTY, ", Incident.State, sep = ""))
+```
+
+Adjust for inflation
+```{r adjust country values for inflation using BEA values}
+#add fiscal year value
+hazmat_allstates_incidents <- hazmat_allstates_incidents %>%
+  mutate(Fiscal.Year = case_when(
+    Date.Of.Incident <= as.Date('2013-09-30') ~ 2013,
+    Date.Of.Incident <= as.Date('2014-09-30') ~ 2014,
+    Date.Of.Incident <= as.Date('2015-09-30') ~ 2015,
+    Date.Of.Incident <= as.Date('2016-09-30') ~ 2016,
+    Date.Of.Incident <= as.Date('2017-09-30') ~ 2017,
+    Date.Of.Incident <= as.Date('2018-09-30') ~ 2018,
+    Date.Of.Incident <= as.Date('2019-09-30') ~ 2019,
+    Date.Of.Incident <= as.Date('2020-09-30') ~ 2020,
+    Date.Of.Incident <= as.Date('2021-09-30') ~ 2021,
+    Date.Of.Incident <= as.Date('2022-09-30') ~ 2022,
+    Date.Of.Incident <= as.Date('2023-09-30') ~ 2023,
+  ))
+
+
+#adjust for inflation using BEA values
+adjust_values <- read.csv("../final_data_product/adjustforinflationvalues_BEA.csv")
+
+hazmat_allstates_incidents <- left_join(hazmat_allstates_incidents, adjust_values, by = "Fiscal.Year")
+
+
+hazmat_allstates_adjusted_incidents <- hazmat_allstates_incidents %>%
+  mutate(Adjusted.Total.Damages = Total.Amount.Of.Damages * values)
+
+hazmat_allstates_adjusted_incidents %>%
+  filter(Incident.City == "EAST PALESTINE")
+
+hazmat_allstates_incidents %>%
+  filter(is.na(Total.Amount.Of.Damages))
+
+hazmat_allstates_adjusted_incidents %>%
+  arrange(-Adjusted.Total.Damages)
+
+hazmat_allstates_adjusted_incidents %>%
+  group_by(Mode.Of.Transportation) %>%
+  count(year) %>%
+  mutate(percentage = n / sum(n) * 100)
+```
+
+
+
+```{r adjust region values for inflation using BEA values}
+#add fiscal year value
+hazmat_region_full_incidents <- hazmat_region_full_incidents %>%
+  mutate(Fiscal.Year = case_when(
+    Date.Of.Incident <= as.Date('2013-09-30') ~ 2013,
+    Date.Of.Incident <= as.Date('2014-09-30') ~ 2014,
+    Date.Of.Incident <= as.Date('2015-09-30') ~ 2015,
+    Date.Of.Incident <= as.Date('2016-09-30') ~ 2016,
+    Date.Of.Incident <= as.Date('2017-09-30') ~ 2017,
+    Date.Of.Incident <= as.Date('2018-09-30') ~ 2018,
+    Date.Of.Incident <= as.Date('2019-09-30') ~ 2019,
+    Date.Of.Incident <= as.Date('2020-09-30') ~ 2020,
+    Date.Of.Incident <= as.Date('2021-09-30') ~ 2021,
+    Date.Of.Incident <= as.Date('2022-09-30') ~ 2022,
+    Date.Of.Incident <= as.Date('2023-09-30') ~ 2023,
+  ))
+
+#edit east palestine value!!!
+hazmat_region_full_incidents <- hazmat_region_full_incidents %>%
+    mutate(Total.Amount.Of.Damages = ifelse(Incident.City == "EAST PALESTINE", 58520000, Total.Amount.Of.Damages))
+  
+
+#adjust for inflation using BEA values
+adjust_values <- read.csv("../final_data_product/adjustforinflationvalues_BEA.csv")
+hazmat_region_full_incidents <- left_join(hazmat_region_full_incidents, adjust_values, by = "Fiscal.Year")
+
+
+hazmat_region_adjusted_incidents <- hazmat_region_full_incidents %>%
+  mutate(Adjusted.Total.Damages = Total.Amount.Of.Damages * values)
+
+hazmat_region_adjusted_incidents %>%
+  arrange(-Adjusted.Total.Damages)
+
+```
+
+
+```{r}
+county_codes <- read.csv("../final_data_product/NCHSURCodes2013.csv")
+
+county_codes <- county_codes %>%
+  select(County.name, X2013.code, State) %>%
+  mutate(countystate = paste(County.name, ", ", State, sep = ""))
+  
+
+county_codes$countystate <- toupper(county_codes$countystate)
+
+hazmat_ten_full_codes <- left_join(hazmat_region_adjusted_incidents, county_codes, by = "countystate")
+
+hazmat_ten_full_codes %>%
+  filter(is.na(X2013.code))
+
+hazmat_map_all <- hazmat_ten_full_codes %>%
+    filter(!is.na(X2013.code))
+
+```
+
+
+#################################################################
+Datapoints for Main Story
+#################################################################
+
+Proportion of incidents in the region
+```{r}
+hazmat_allstates_adjusted_incidents #210,518
+
+hazmat_region_adjusted_incidents #46,049
+
+hazmat_region_adjusted_incidents%>%
+    filter(Incident.State == "IL" | Incident.State == "IN" | Incident.State == "OH" | Incident.State == "MI" | Incident.State == "KY") %>%
+    count(Incident.State) %>%
+  arrange(-n)
+
+21.8%
+```
+
+Annual number of incidents in the region
+```{r}
+hazmat_region_adjusted_incidents %>%
+  count(year)
+```
+
+Percent/number of incidents deemed serious
+```{r}
+hazmat_region_adjusted_incidents %>%
+  count(Serious.Incident.Ind) %>%
+  mutate(percentage = n / sum(n) *100)
+```
+
+Incidents by mode
+```{r}
+hazmat_region_adjusted_incidents %>%
+  count(Mode.Of.Transportation) %>%
+  mutate(percentage = n / sum(n) *100)
+```
+
+Number of fatalities
+```{r}
+hazmat_region_adjusted_incidents %>%
+  summarize(sum = sum(Total.Hazmat.Fatalities))
+
+hazmat_region_adjusted_incidents %>%
+  summarize(sum = sum(Total.Hazmat.Injuries))
+```
+
+20 worst incidents — what companies - Norfolk Southern
+```{r}
+hazmat_region_adjusted_incidents %>%
+  arrange(-Adjusted.Total.Damages) %>%
+  select(Carrier.Reporter.Name,Mode.Of.Transportation, Date.Of.Incident, Incident.City, Total.Amount.Of.Damages, Adjusted.Total.Damages, values)
+
+7/20
+```
+
+Last year
+```{r}
+hazmat_region_adjusted_incidents %>%
+  filter(year == 2022) 
+
+hazmat_region_adjusted_incidents %>%
+  filter(year == 2022) %>%
+  filter(Serious.Incident.Ind == "Yes")
+
+hazmat_allstates_adjusted_incidents %>%
+    filter(Incident.State == "IL" | Incident.State == "IN" | Incident.State == "OH" | Incident.State == "MI" | Incident.State == "KY") %>%
+    filter(year == 2022) %>%
+    filter(Serious.Incident.Ind == "Yes")
+
+
+```
+City with the most incidents
+```{r}
+hazmat_region_adjusted_incidents %>%
+  count(Incident.City) %>%
+  arrange(-n)
+
+hazmat_region_adjusted_incidents %>%
+  filter(Transportation.Phase == "In Transit") %>%
+  count(Incident.City) %>%
+  arrange(-n)
+```
+
+#################################################################
+Datapoints for Data Article
+#################################################################
+```{r}
+hazmat_allstates_adjusted_incidents %>%
+  filter(Incident.State == "IL" | Incident.State == "IN" | Incident.State == "OH" | Incident.State == "MI" | Incident.State == "KY") %>%
+  count(year) #bye why is it diff
+  
+
+hazmat_region_adjusted_incidents %>%
+    count(year)
+
+hazmat_region_adjusted_incidents %>%
+  filter(Multiple.Rows.Per.Incident == "Yes") %>%
+  arrange(Date.Of.Incident)
+
+hazmat_region_full %>%
+  count(year)
+
+hazmat_allstates %>%
+  filter(Incident.State == "IL" | Incident.State == "IN" | Incident.State == "OH" | Incident.State == "MI" | Incident.State == "KY") %>%
+  count(year)
+
+hazmat_region_adjusted_incidents %>%
+  summarize(sum(Adjusted.Total.Damages))
+```
+Over time
+```{r}
+hazmat_allstates_adjusted_incidents %>% #seemed like they took out highway accidents in between the time of me downloading the report lmfaooooo
+  filter(Incident.State == "IL" | Incident.State == "IN" | Incident.State == "OH" | Incident.State == "MI" | Incident.State == "KY") %>%
+  group_by(Mode.Of.Transportation) %>%
+  count(year)
+  
+
+hazmat_region_adjusted_incidents %>%
+  group_by(Mode.Of.Transportation) %>%
+    count(year)
+
+hazmat_region_full %>%
+  count(year)
+
+```
+
+In transit
+```{r}
+hazmat_region_adjusted_incidents %>%
+  count(Transportation.Phase) %>%
+  mutate(percentage = n/sum(n))
+
+hazmat_allstates_adjusted_incidents %>%
+  count(Transportation.Phase) %>%
+  mutate(percentage = n/sum(n))
+
+```
+```{r}
+hazmat_region_adjusted_incidents %>%
+  group_by(Transportation.Phase) %>%
+  summarize(damages = sum(Adjusted.Total.Damages)) %>%
+  mutate(percentage = damages/sum(damages))
+
+
+hazmat_allstates_adjusted_incidents %>%
+  group_by(Transportation.Phase) %>%
+  summarize(damages = sum(Adjusted.Total.Damages)) %>%
+  mutate(percentage = damages/sum(damages))
+
+```
+```{r in transit by mode}
+hazmat_region_graph <- hazmat_region_adjusted_incidents %>%
+  filter(Transportation.Phase == "In Transit") %>%
+  group_by(year, Mode.Of.Transportation) %>%
+  summarise(count = n()) 
+  
+hazmat_region_graph %>%
+  ggplot(aes(x = year, y = count, fill = Mode.Of.Transportation)) +
+  geom_col()
+```
+
+```{r}
+hazmat_region_adjusted_incidents %>%
+  filter(Transportation.Phase == "In Transit") %>%
+  count(Serious.Incident.Ind)
+
+```
+Average damages in the country
+```{r in the country}
+hazmat_allstates_adjusted_incidents %>%
+  group_by(Mode.Of.Transportation) %>%
+  summarize(sum = sum(Adjusted.Total.Damages)) %>%
+  arrange(-sum) %>%
+  mutate(percentage = sum/sum(sum) *100)
+
+hazmat_allstates_adjusted_incidents %>%  #3317.56		
+  filter(Mode.Of.Transportation == "Highway") %>%
+  summarise(mean_damages = mean(Adjusted.Total.Damages, na.rm = TRUE))
+
+hazmat_allstates_adjusted_incidents %>% #72474.35
+  filter(Mode.Of.Transportation == "Rail") %>%
+  summarise(mean_damages = mean(Adjusted.Total.Damages, na.rm = TRUE))
+
+####
+
+hazmat_allstates_adjusted_incidents %>%  #10521.21
+  filter(Transportation.Phase == "In Transit") %>%
+  filter(Mode.Of.Transportation == "Highway") %>%
+  summarise(mean_damages = mean(Adjusted.Total.Damages, na.rm = TRUE))
+
+hazmat_allstates_adjusted_incidents %>% #73842
+  filter(Transportation.Phase == "In Transit") %>%
+  filter(Mode.Of.Transportation == "Rail") %>%
+  summarise(mean_damages = mean(Adjusted.Total.Damages, na.rm = TRUE))
+
+hazmat_allstates_adjusted_incidents %>%  #3317.56		
+  filter(Transportation.Phase == "In Transit") %>%
+  filter(Mode.Of.Transportation == "Highway") %>%
+  summarise(mean_damages = mean(Adjusted.Total.Damages, na.rm = TRUE))
+
+
+hazmat_allstates_adjusted_incidents %>%
+  filter(Transportation.Phase == "In Transit") %>%
+  group_by(Mode.Of.Transportation) %>%
+  summarize(sum = sum(Adjusted.Total.Damages)) %>%
+  mutate(percentage = sum/sum(sum) *100)
+
+
+hazmat_allstates_adjusted_incidents %>%
+  filter(Transportation.Phase == "In Transit") %>%
+  count(Mode.Of.Transportation)
+
+
+hazmat_allstates_adjusted_incidents %>%  #3317.56		
+  filter(Serious.Incident.Ind == "Yes") %>%
+  filter(Mode.Of.Transportation == "Highway") %>%
+  summarise(mean_damages = mean(Adjusted.Total.Damages, na.rm = TRUE))
+
+hazmat_allstates_adjusted_incidents %>% #72474.35
+  filter(Serious.Incident.Ind == "Yes") %>%
+  filter(Mode.Of.Transportation == "Rail") %>%
+  summarise(mean_damages = mean(Adjusted.Total.Damages, na.rm = TRUE))
+
+72474.35/3317.56
+
+hazmat_allstates_adjusted_incidents %>%  #3317.56		
+  filter(Transportation.Phase == "Unloading") %>%
+  filter(Mode.Of.Transportation == "Highway") %>%
+  summarise(mean_damages = mean(Adjusted.Total.Damages, na.rm = TRUE))
+
+hazmat_allstates_adjusted_incidents %>% #72474.35
+  filter(Transportation.Phase == "Unloading") %>%
+  filter(Mode.Of.Transportation == "Rail") %>%
+  summarise(mean_damages = mean(Adjusted.Total.Damages, na.rm = TRUE))
+
+```
+
+
+```{r}
+hazmat_region_full_incidents %>%
+  filter(Environmental.Damage.Result == "Yes" | Water.Sewer.Result.Ind == "Yes")
+
+hazmat_allstates_incidents %>%
+  filter(Environmental.Damage.Result == "Yes" | Water.Sewer.Result.Ind == "Yes")
+
+```
+
+#################################################################
+Map Of Incidents
+#################################################################
+```{r}
+hazmat_map_all <- hazmat_map_all %>%
+  group_by(Incident.State) %>%
+  count(countystate) %>%
+  arrange(-n)
+```
+
+#################################################################
+Five worst incidents
+#################################################################
+```{r}
+hazmat_region_adjusted_incidents %>%
+  select(Date.Of.Incident, Incident.City, Total.Amount.Of.Damages, Adjusted.Total.Damages, values) %>%
+  arrange(-Adjusted.Total.Damages)
+```
+
+
+```{r}
+hazmat_region_adjusted_incidents %>%
+  filter(Incident.State == "IL") %>%
+  select(Date.Of.Incident, Incident.City, Total.Amount.Of.Damages, Adjusted.Total.Damages, values) %>%
+  arrange(-Adjusted.Total.Damages)
+
+hazmat_region_adjusted_incidents %>%
+  filter(Incident.State == "IN") %>%
+  select(Date.Of.Incident, Incident.City, Total.Amount.Of.Damages, Adjusted.Total.Damages, values) %>%
+  arrange(-Adjusted.Total.Damages)
+
+hazmat_region_adjusted_incidents %>%
+  filter(Incident.State == "OH") %>%
+  select(Date.Of.Incident, Incident.City, Total.Amount.Of.Damages, Adjusted.Total.Damages, values) %>%
+  arrange(-Adjusted.Total.Damages)
+
+hazmat_region_adjusted_incidents %>%
+  filter(Incident.State == "KY") %>%
+  select(Date.Of.Incident, Incident.City, Total.Amount.Of.Damages, Adjusted.Total.Damages, values) %>%
+  arrange(-Adjusted.Total.Damages)
+
+hazmat_region_adjusted_incidents %>%
+  filter(Incident.State == "MI") %>%
+  select(Mode.Of.Transportation, Date.Of.Incident, Incident.City, Total.Amount.Of.Damages, Adjusted.Total.Damages, values) %>%
+  arrange(-Adjusted.Total.Damages)
+
+hazmat_region_adjusted_incidents %>%
+    arrange(-Adjusted.Total.Damages) %>%
+  
+hazmat_region_adjusted_incidents %>%
+  summarize(sum(Adjusted.Total.Damages))
+```
+
+
+#################################################################
+Bar of US States by Incident Rate
+#################################################################
+- Use protracted data of all states from 2013-2023
+- Use incidents
+```{r}
+hazmat_allstates_incidents %>%
+  count(Incident.State) %>%
+  arrange(-n)
+```
+
+
+#################################################################
+Bar of Incidents by Mode
+#################################################################
+```{r}
+incidents_by_mode <- hazmat_region_full_incidents %>%
+  group_by(year, Mode.Of.Transportation) %>%
+  summarise(count = n())
+
+incidents_by_mode %>%
+  pivot_wider(names_from = Mode.Of.Transportation, values_from = count)
+
+```
+
+
+#################################################################
+Damages in the region Sankey
+#################################################################
+Average damages
+```{r in the region}
+hazmat_region_adjusted_incidents %>%
+  group_by(Mode.Of.Transportation) %>%
+  summarize(sum = sum(Adjusted.Total.Damages)) %>%
+  arrange(-sum) %>%
+  mutate(percentage = sum/sum(sum) *100)
+
+
+hazmat_region_adjusted_incidents %>%  #2668.047
+  ungroup() %>%
+  filter(Mode.Of.Transportation == "Highway") %>%
+  summarise(mean_damages = mean(Adjusted.Total.Damages, na.rm = TRUE))
+
+hazmat_region_adjusted_incidents %>% #153747
+  ungroup() %>%
+  filter(Mode.Of.Transportation == "Rail") %>%
+  summarise(mean_damages = mean(Adjusted.Total.Damages, na.rm = TRUE))
+
+153747/2668.047
+
+```
+
+#################################################################
+Urban/Rural
+#################################################################
+
+NCHS 
+```{r}
+
+hazmat_map_all <- hazmat_map_all %>%
+  mutate(urban = case_when(
+    X2013.code == 1 ~ "urban",
+    X2013.code %in% c(2, 3, 4) ~ "suburban", 
+    X2013.code %in% c(5, 6) ~ "rural"
+  ))
+
+#all incidents
+hazmat_map_all %>%
+  group_by(urban) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(percentage = (n / sum(n)) * 100) 
+
+hazmat_map_all %>%
+  filter(Serious.Incident.Ind == "Yes") %>%
+  #filter(Transportation.Phase == 'In Transit') %>%
+  group_by(urban) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(percentage = (n / sum(n)) * 100) 
+
+
+#serious transit accidents
+hazmat_map_all %>%
+  filter(Serious.Incident.Ind == "Yes") %>%
+  filter(Transportation.Phase == 'In Transit') %>%
+  group_by(urban) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(percentage = (n / sum(n)) * 100) 
+
+#about the same for highway and rail
+hazmat_map_all %>%
+  filter(Mode.Of.Transportation == "Rail" | Mode.Of.Transportation == "Highway") %>%
+  #filter(Serious.Incident.Ind == "Yes") %>%
+  #filter(Transportation.Phase == "In Transit") %>%
+  group_by(Mode.Of.Transportation) %>%
+  count(urban) %>%
+  mutate(percentage = n / sum(n) * 100)
+
+hazmat_map_all %>%
+  filter(Mode.Of.Transportation == "Rail" | Mode.Of.Transportation == "Highway") %>%
+  filter(Serious.Incident.Ind == "Yes") %>%
+  filter(Transportation.Phase == "In Transit") %>%
+  group_by(Mode.Of.Transportation) %>%
+  count(urban) %>%
+  mutate(percentage = n / sum(n) * 100)
+```
+
+Other urban/rural metrics, use for comparison purposes
+
+RUCC
+```{r omb ruc codes using counties}
+omb_ruc_codes <- read.csv("/Users/koung/OneDrive - Gannett Company, Incorporated/Summer 2023 Projects/Hazmat_Incidents/final_data_product/ruralurbancodes2013.csv")
+
+omb_ruc_codes <- omb_ruc_codes %>%
+  mutate(countystate = paste(County_Name, State, sep = ", ")) %>%
+  mutate(countystate = toupper(countystate)) %>%
+  select(countystate, RUCC_2013)
+
+
+hazmat_ten_full_omb_ruc <- left_join(hazmat_region_adjusted_incidents, omb_ruc_codes, by = "countystate")
+
+hazmat_ten_full_omb_ruc <- hazmat_ten_full_omb_ruc %>%
+  mutate(urban = case_when(
+    RUCC_2013 == 1 ~ "urban",
+    RUCC_2013 %in% c(2, 3) ~ "suburban", 
+    RUCC_2013 %in% c(4, 5, 6, 7, 8, 9) ~ "rural"
+  ))
+  
+hazmat_ten_full_omb_ruc %>%
+  filter(!is.na(RUCC_2013)) %>%
+  #filter(Serious.Incident.Ind == "Yes") %>%
+  #filter(Transportation.Phase == 'In Transit') %>%
+  group_by(urban) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(percentage = (n / sum(n)) * 100) 
+```
+HRSA
+```{r}
+hrsa_rural_counties <- read.csv("HRSA Rural Counties Designation.csv")
+
+hrsa_county_codes <- hrsa_rural_counties %>%
+  select(County, State, Metro) %>%
+  mutate(countystate = paste(County, " COUNTY, ", State, sep = "")) 
+  #%>% filter(Metro == 0)
+
+hrsa_county_codes$countystate <- toupper(hrsa_county_codes$countystate)
+
+
+hazmat_ten_full_hrsa <- left_join(hazmat_ten_full_incidents, hrsa_county_codes, by = "countystate")
+
+
+hazmat_ten_full_hrsa <- hazmat_ten_full_hrsa %>%
+  mutate(HRSA.Rural = ifelse(!is.na(County), "Yes", "No"))
+
+
+hazmat_ten_full_hrsa %>%
+  group_by(HRSA.Rural) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(percentage = (n / sum(n)) * 100) 
+
+hazmat_ten_full_hrsa %>%
+  filter(Serious.Incident.Ind == "Yes") %>%
+  filter(Transportation.Phase == 'In Transit') %>%
+  group_by(HRSA.Rural) %>%
+  count() %>%
+  ungroup() %>%
+  mutate(percentage = (n / sum(n)) * 100) 
+```
+
+#################################################################
+Incidents vs damages
+#################################################################
+
+```{r}
+hazmat_region_adjusted_incidents %>%
+  count(Mode.Of.Transportation)
+
+```
+
+```{r}
+hazmat_region_adjusted_incidents %>%
+  group_by(Mode.Of.Transportation) %>%
+  summarize(sum = sum(Adjusted.Total.Damages)) %>%
+  mutate(percentage = sum/sum(sum) *100)
+
+
+hazmat_region_adjusted_incidents %>%
+  filter(Transportation.Phase == "In Transit") %>%
+  group_by(Mode.Of.Transportation) %>%
+  summarize(sum = sum(Adjusted.Total.Damages)) %>%
+  mutate(percentage = sum/sum(sum) *100)
+
+```

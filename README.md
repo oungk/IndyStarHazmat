@@ -17,6 +17,6 @@ Read about the full methodology behind this project [here](https://www.indystar.
 - [6 things to know about the transportation of hazardous materials in the Midwest](https://www.indystar.com/story/news/environment/2023/07/25/6-things-to-know-about-the-transportation-of-hazardous-materials/70440687007/), IndyStar
 - [Behind the numbers: Hazmat transportation accidents are on the rise in Midwest](https://www.indystar.com/story/news/investigations/2023/07/25/truck-accidents-driving-increase-in-hazmat-spills-in-midwest/70432309007/), IndyStar
 - [Norfolk Southern behind 4 of 5 costliest hazmat incidents in Ohio in past decade](https://www.cincinnati.com/story/news/2023/07/25/five-costliest-hazmat-incidents-in-ohio-since-2013/70402259007/), The Cinncinati Inquirer
-- [Michigan's 5 costliest hazmat accidents in the past decade all involved tanker trucks](https://www.freep.com/story/news/2023/07/25/michigans-5-costliest-hazmat-accidents-in-the-past-decade/70392893007/)
+- [Michigan's 5 costliest hazmat accidents in the past decade all involved tanker trucks](https://www.freep.com/story/news/2023/07/25/michigans-5-costliest-hazmat-accidents-in-the-past-decade/70392893007/), The Detroit Free Press
 - [Kentucky's 5 costliest hazardous material transportation incidents of the past decade](https://www.courier-journal.com/story/news/local/2023/07/24/kentuckys-5-costliest-hazmat-transit-incidents-of-the-past-decade/70402583007/), The Courier Journal
 
